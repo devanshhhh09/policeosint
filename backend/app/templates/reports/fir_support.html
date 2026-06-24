@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="doc-title">FIR SUPPORT REPORT — CYBER CRIME INVESTIGATION</div>
+
+<div class="meta-grid">
+  <div class="meta-item"><span>Case Number:</span> {{ case.case_number }}</div>
+  <div class="meta-item"><span>FIR Status:</span> {{ "Filed" if case.is_fir_filed else "Pending" }}</div>
+  <div class="meta-item"><span>Case Type:</span> {{ case.case_type | upper }}</div>
+  <div class="meta-item"><span>Priority:</span>
+    <span class="badge badge-{{ 'red' if case.priority == 'critical' else 'amber' if case.priority == 'high' else 'green' }}">
+      {{ case.priority | upper }}
+    </span>
+  </div>
+  <div class="meta-item"><span>Date of Incident:</span> {{ case.created_at }}</div>
+  <div class="meta-item"><span>Station:</span> {{ officer_station }}</div>
+  <div class="meta-item"><span>Victim Name:</span> {{ case.victim_name or "Not disclosed" }}</div>
+  <div class="meta-item"><span>Amount Lost:</span> {{ "₹" + case.amount_lost if case.amount_lost else "Under assessment" }}</div>
+</div>
+
+<div class="section">
+  <div class="section-title">1. CASE SUMMARY</div>
+  <p>{{ case.description or "Investigation ongoing. Details being compiled by the cyber cell." }}</p>
+  {% if case.incident_location %}
+  <p><strong>Incident Location:</strong> {{ case.incident_location }}</p>
+  {% endif %}
+</div>
+
+<div class="section">
+  <div class="section-title">2. APPLICABLE IPC / IT ACT SECTIONS</div>
+  <table>
+    <tr><th>Section</th><th>Act</th><th>Description</th><th>Applicability</th></tr>
+    {% for sec in ipc_sections %}
+    <tr>
+      <td><strong>{{ sec.section }}</strong></td>
+      <td>{{ sec.act }}</td>
+      <td>{{ sec.description }}</td>
+      <td>{{ sec.applicability }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div class="section">
+  <div class="section-title">3. OSINT INVESTIGATION FINDINGS</div>
+  {% if investigations %}
+  <table>
+    <tr><th>Investigation Type</th><th>Target</th><th>Risk Score</th><th>Key Findings</th></tr>
+    {% for inv in investigations %}
+    <tr>
+      <td>{{ inv.investigation_type | title }}</td>
+      <td style="font-family: monospace; font-size: 8.5pt;">{{ inv.query }}</td>
+      <td class="{{ 'risk-high' if inv.risk_score >= 70 else 'risk-medium' if inv.risk_score >= 40 else 'risk-low' }}">
+        {{ inv.risk_score | int }}/100
+      </td>
+      <td>{{ inv.summary or "—" }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p>No investigations linked to this case yet.</p>
+  {% endif %}
+</div>
+
+<div class="section">
+  <div class="section-title">4. DIGITAL EVIDENCE</div>
+  {% if evidence_list %}
+  <table>
+    <tr><th>Exhibit No.</th><th>Filename</th><th>Type</th><th>SHA256 Hash</th><th>Size</th><th>Sealed</th></tr>
+    {% for ev in evidence_list %}
+    <tr>
+      <td>{{ ev.exhibit_number or "—" }}</td>
+      <td>{{ ev.original_filename }}</td>
+      <td>{{ ev.evidence_type }}</td>
+      <td style="font-family: monospace; font-size: 7pt; word-break: break-all;">{{ ev.sha256_hash }}</td>
+      <td>{{ ev.file_size }}</td>
+      <td>{{ "✓ Sealed" if ev.is_sealed else "Pending" }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p>No digital evidence uploaded yet. Evidence should be collected and uploaded before FIR filing.</p>
+  {% endif %}
+</div>
+
+<div class="section">
+  <div class="section-title">5. LEGAL NOTICES TO BE ISSUED</div>
+  <div class="notice-box">
+    <h4>Notice to Bank / Payment Service Provider (u/s 91 CrPC)</h4>
+    <p>To the Nodal Officer, {{ notice_bank or "[Bank/PSP Name]" }}<br>
+    Subject: Requisition of transaction records for Case No. {{ case.case_number }}<br>
+    Please provide all transaction logs, KYC documents, device fingerprints, and IP logs for
+    account/UPI ID associated with this investigation within 7 working days.</p>
+  </div>
+  <div class="notice-box">
+    <h4>Notice to Telecom Provider (u/s 91 CrPC)</h4>
+    <p>To the Nodal Officer, [Telecom Provider]<br>
+    Subject: CDR / IMEI / tower location data requisition for Case No. {{ case.case_number }}<br>
+    Please provide Call Detail Records, IMEI history, and cell tower location data for the
+    suspect mobile number within 7 working days.</p>
+  </div>
+  <div class="notice-box">
+    <h4>Notice to Platform / Social Media (u/s 91 CrPC)</h4>
+    <p>To the Grievance Officer, [Platform Name]<br>
+    Subject: User data preservation and disclosure for Case No. {{ case.case_number }}<br>
+    Please preserve and provide account details, login IPs, device IDs, and communication
+    logs related to the suspect account within 72 hours (emergency) / 15 days (standard).</p>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">6. ESCALATION MATRIX</div>
+  <table>
+    <tr><th>Agency</th><th>Trigger Condition</th><th>Contact</th><th>Action Required</th></tr>
+    <tr><td>I4C / MHA</td><td>Amount > ₹1 lakh or organised crime</td><td>cybercrime.gov.in / 1930</td><td>File on portal, share FIR copy</td></tr>
+    <tr><td>CERT-In</td><td>Ransomware / data breach / APT</td><td>cert-in.org.in / incident@cert-in.org.in</td><td>Submit incident report within 6 hrs</td></tr>
+    <tr><td>NPCI</td><td>UPI fraud</td><td>npci.org.in/fraud-reporting</td><td>Report UPI ID for blacklisting</td></tr>
+    <tr><td>RBI Ombudsman</td><td>Bank refused to freeze account</td><td>rbi.org.in/ombudsman</td><td>Escalate with FIR copy</td></tr>
+    <tr><td>SFIO</td><td>Investment fraud > ₹10 lakh</td><td>sfio.nic.in</td><td>Refer for financial investigation</td></tr>
+    <tr><td>ED / PMLA</td><td>Money laundering > ₹50 lakh</td><td>enforcementdirectorate.gov.in</td><td>Share case file for PMLA action</td></tr>
+  </table>
+</div>
+
+<div class="section">
+  <div class="section-title">7. RECOMMENDED NEXT STEPS</div>
+  <ul>
+    {% for step in recommended_steps %}
+    <li>{{ step }}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endblock %}

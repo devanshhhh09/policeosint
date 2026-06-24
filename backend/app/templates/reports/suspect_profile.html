@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="doc-title">SUSPECT PROFILE — DIGITAL INTELLIGENCE</div>
+
+<div class="meta-grid">
+  <div class="meta-item"><span>Case Number:</span> {{ case.case_number }}</div>
+  <div class="meta-item"><span>Risk Score:</span>
+    <span class="badge badge-{{ 'red' if suspect.risk_score >= 70 else 'amber' if suspect.risk_score >= 40 else 'green' }}">
+      {{ suspect.risk_score }}/100
+    </span>
+  </div>
+  <div class="meta-item"><span>Report Date:</span> {{ generated_at }}</div>
+  <div class="meta-item"><span>Prepared By:</span> {{ officer_name }}</div>
+</div>
+
+<div class="section">
+  <div class="section-title">1. DIGITAL IDENTIFIERS</div>
+  <table>
+    <tr><th>Identifier Type</th><th>Value</th><th>Platform</th><th>Verified</th></tr>
+    {% for id in suspect.identifiers %}
+    <tr>
+      <td>{{ id.type }}</td>
+      <td style="font-family:monospace; font-size:8.5pt;">{{ id.value }}</td>
+      <td>{{ id.platform or "—" }}</td>
+      <td>{{ "✓ Yes" if id.verified else "Unverified" }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div class="section">
+  <div class="section-title">2. RISK ASSESSMENT</div>
+  <table>
+    <tr><th>Risk Factor</th><th>Score</th><th>Details</th></tr>
+    {% for rf in suspect.risk_factors %}
+    <tr>
+      <td>{{ rf.factor }}</td>
+      <td class="{{ 'risk-high' if rf.score >= 70 else 'risk-medium' if rf.score >= 40 else 'risk-low' }}">{{ rf.score }}/100</td>
+      <td>{{ rf.details }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div class="section">
+  <div class="section-title">3. ONLINE PRESENCE</div>
+  <table>
+    <tr><th>Platform</th><th>Username / Profile</th><th>Status</th><th>Notes</th></tr>
+    {% for p in suspect.online_presence %}
+    <tr>
+      <td>{{ p.platform }}</td>
+      <td style="font-family:monospace; font-size:8.5pt;">{{ p.username }}</td>
+      <td><span class="badge badge-{{ 'red' if p.status == 'Active' else 'amber' }}">{{ p.status }}</span></td>
+      <td>{{ p.notes or "—" }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div class="section">
+  <div class="section-title">4. MODUS OPERANDI</div>
+  <p>{{ suspect.modus_operandi }}</p>
+</div>
+
+<div class="section">
+  <div class="section-title">5. GROUNDS FOR ARREST / NOTICE</div>
+  <div class="highlight">{{ suspect.arrest_grounds }}</div>
+  <ul>
+    {% for ground in suspect.legal_grounds %}
+    <li>{{ ground }}</li>
+    {% endfor %}
+  </ul>
+</div>
+
+<div class="section">
+  <div class="section-title">6. KNOWN ASSOCIATES</div>
+  {% if suspect.associates %}
+  <table>
+    <tr><th>Identifier</th><th>Relationship</th><th>Risk</th></tr>
+    {% for a in suspect.associates %}
+    <tr>
+      <td style="font-family:monospace;">{{ a.identifier }}</td>
+      <td>{{ a.relationship }}</td>
+      <td class="{{ 'risk-high' if a.risk >= 70 else 'risk-medium' if a.risk >= 40 else 'risk-low' }}">{{ a.risk }}/100</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p>No known associates identified at this time.</p>
+  {% endif %}
+</div>
+{% endblock %}

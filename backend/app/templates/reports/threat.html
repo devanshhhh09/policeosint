@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="doc-title">THREAT INTELLIGENCE REPORT</div>
+
+<div class="meta-grid">
+  <div class="meta-item"><span>Threat Actor:</span> {{ threat_actor or "Unknown" }}</div>
+  <div class="meta-item"><span>Threat Level:</span>
+    <span class="badge badge-{{ 'red' if threat_level == 'CRITICAL' else 'amber' if threat_level == 'HIGH' else 'green' }}">
+      {{ threat_level }}
+    </span>
+  </div>
+  <div class="meta-item"><span>Case Number:</span> {{ case.case_number }}</div>
+  <div class="meta-item"><span>Report Date:</span> {{ generated_at }}</div>
+  <div class="meta-item"><span>Malware Family:</span> {{ malware_family or "Not identified" }}</div>
+  <div class="meta-item"><span>Campaign:</span> {{ campaign or "Under analysis" }}</div>
+</div>
+
+<div class="section">
+  <div class="section-title">1. THREAT SUMMARY</div>
+  <div class="highlight">{{ threat_summary }}</div>
+</div>
+
+<div class="section">
+  <div class="section-title">2. THREAT ACTOR PROFILE</div>
+  <table>
+    <tr><th>Attribute</th><th>Details</th></tr>
+    {% for k, v in actor_profile.items() %}
+    <tr><td><strong>{{ k }}</strong></td><td>{{ v }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div class="section">
+  <div class="section-title">3. MITRE ATT&CK TECHNIQUES</div>
+  <table>
+    <tr><th>ID</th><th>Technique</th><th>Tactic</th><th>Observed</th></tr>
+    {% for t in mitre_techniques %}
+    <tr>
+      <td><strong>{{ t.id }}</strong></td>
+      <td>{{ t.name }}</td>
+      <td>{{ t.tactic }}</td>
+      <td>{{ "✓ Yes" if t.observed else "Suspected" }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div class="section">
+  <div class="section-title">4. INDICATORS OF COMPROMISE</div>
+  <table>
+    <tr><th>Type</th><th>Value</th><th>Confidence</th></tr>
+    {% for ioc in iocs %}
+    <tr>
+      <td>{{ ioc.type }}</td>
+      <td style="font-family:monospace; font-size:8.5pt; word-break:break-all;">{{ ioc.value }}</td>
+      <td class="{{ 'risk-high' if ioc.confidence == 'HIGH' else 'risk-medium' }}">{{ ioc.confidence }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div class="section">
+  <div class="section-title">5. COUNTERMEASURES</div>
+  <ul>
+    {% for cm in countermeasures %}
+    <li>{{ cm }}</li>
+    {% endfor %}
+  </ul>
+</div>
+
+<div class="section">
+  <div class="section-title">6. ESCALATION</div>
+  <p>{{ escalation_note }}</p>
+</div>
+{% endblock %}

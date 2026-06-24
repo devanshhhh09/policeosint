@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="doc-title">FRAUD INVESTIGATION REPORT</div>
+
+<div class="meta-grid">
+  <div class="meta-item"><span>Case Number:</span> {{ case.case_number }}</div>
+  <div class="meta-item"><span>Fraud Type:</span> {{ case.case_type | upper }}</div>
+  <div class="meta-item"><span>Total Amount Lost:</span> <span class="risk-high">{{ total_loss }}</span></div>
+  <div class="meta-item"><span>Victim Count:</span> {{ victim_count }}</div>
+  <div class="meta-item"><span>Mule Accounts:</span> {{ mule_count }}</div>
+  <div class="meta-item"><span>Report Date:</span> {{ generated_at }}</div>
+</div>
+
+<div class="section">
+  <div class="section-title">1. FRAUD OVERVIEW</div>
+  <div class="highlight">{{ fraud_summary }}</div>
+</div>
+
+<div class="section">
+  <div class="section-title">2. VICTIM DETAILS</div>
+  <table>
+    <tr><th>#</th><th>Victim Name</th><th>Contact</th><th>Amount Lost</th><th>Date</th><th>Mode</th></tr>
+    {% for v in victims %}
+    <tr>
+      <td>{{ loop.index }}</td>
+      <td>{{ v.name }}</td>
+      <td style="font-family:monospace;">{{ v.contact }}</td>
+      <td class="risk-high">₹{{ v.amount }}</td>
+      <td>{{ v.date }}</td>
+      <td>{{ v.mode }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div class="section">
+  <div class="section-title">3. UPI / TRANSACTION FLOW</div>
+  <table>
+    <tr><th>UPI ID / Account</th><th>PSP / Bank</th><th>Role</th><th>Amount Transacted</th><th>Action Required</th></tr>
+    {% for acc in accounts %}
+    <tr>
+      <td style="font-family:monospace; font-size:8.5pt;">{{ acc.id }}</td>
+      <td>{{ acc.psp }}</td>
+      <td><span class="badge badge-{{ 'red' if acc.role == 'Primary' else 'amber' if acc.role == 'Mule' else 'blue' }}">{{ acc.role }}</span></td>
+      <td>₹{{ acc.amount }}</td>
+      <td>{{ acc.action }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div class="section">
+  <div class="section-title">4. MULE ACCOUNT FREEZE ORDERS</div>
+  <div class="highlight">
+    <strong>Immediate Action Required:</strong> Issue freeze orders to the following PSPs
+    under Section 102 CrPC / Section 17 PMLA for accounts involved in fraud.
+  </div>
+  <ul>
+    {% for acc in accounts if acc.role in ['Primary', 'Mule'] %}
+    <li><strong>{{ acc.id }}</strong> — {{ acc.psp }} — Issue u/s 102 CrPC / LEA portal freeze request</li>
+    {% endfor %}
+  </ul>
+</div>
+
+<div class="section">
+  <div class="section-title">5. MODUS OPERANDI</div>
+  <p>{{ modus_operandi }}</p>
+</div>
+
+<div class="section">
+  <div class="section-title">6. RECOMMENDED ACTIONS</div>
+  <ul>
+    {% for action in recommended_actions %}
+    <li>{{ action }}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endblock %}
