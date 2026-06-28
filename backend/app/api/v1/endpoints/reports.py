@@ -367,3 +367,114 @@ def _modus_operandi(case_type: str) -> str:
         "identity_theft":   "Suspect obtained victim personal information through social engineering or data breach. Used to create fraudulent accounts and make unauthorized transactions.",
     }
     return mo.get(str(case_type), "Modus operandi under investigation.")
+
+
+@router.get("/{case_id}/download/fraud-pdf")
+async def download_fraud_pdf(
+    case_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_perm("report:generate")),
+):
+    result = await db.execute(select(Case).where(Case.id == case_id))
+    case   = result.scalar_one_or_none()
+    if not case:
+        return JSONResponse(status_code=404, content={"error": "Case not found"})
+
+    fir_data = await get_fir_notes(case_id, db, current_user)
+    try:
+        from app.services.reports.pdf_generator import generate_fraud_report
+        pdf_bytes = generate_fraud_report(
+            case_data={"case_number": case.case_number,
+                       "case_type":   str(case.case_type).replace("CaseType.","")},
+            fir_data=fir_data,
+            officer=current_user.badge_number,
+        )
+        filename = f"Fraud_Investigation_{case.case_number.replace('/','_')}_{datetime.now(timezone.utc).strftime('%Y%m%d')}.pdf"
+        return StreamingResponse(
+            io.BytesIO(pdf_bytes), media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    except ImportError:
+        return JSONResponse(status_code=503, content={"error": "reportlab not installed"})
+
+
+@router.get("/{case_id}/download/threat-pdf")
+async def download_threat_pdf(
+    case_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_perm("report:generate")),
+):
+    result = await db.execute(select(Case).where(Case.id == case_id))
+    case   = result.scalar_one_or_none()
+    if not case:
+        return JSONResponse(status_code=404, content={"error": "Case not found"})
+
+    try:
+        from app.services.reports.pdf_generator import generate_threat_report
+        pdf_bytes = generate_threat_report(
+            case_data={
+                "case_number": case.case_number,
+                "case_type":   str(case.case_type).replace("CaseType.",""),
+            },
+            officer=current_user.badge_number,
+        )
+        filename = f"Threat_Report_{case.case_number.replace('/','_')}_{datetime.now(timezone.utc).strftime('%Y%m%d')}.pdf"
+        return StreamingResponse(
+            io.BytesIO(pdf_bytes), media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    except ImportError:
+        return JSONResponse(status_code=503, content={"error": "reportlab not installed"})
+
+
+@router.get("/{case_id}/download/evidence-pdf")
+async def download_evidence_pdf(
+    case_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_perm("report:generate")),
+):
+    result = await db.execute(select(Case).where(Case.id == case_id))
+    case   = result.scalar_one_or_none()
+    if not case:
+        return JSONResponse(status_code=404, content={"error": "Case not found"})
+
+    from app.db.models.evidence import Evidence
+    ev_result = await db.execute(
+        select(Evidence).where(Evidence.case_id == case_id)
+        .order_by(Evidence.created_at.asc())
+    )
+    evidence_list = [
+        {
+            "exhibit_number":    e.exhibit_number,
+            "original_filename": e.original_filename,
+            "evidence_type":     str(e.evidence_type).replace("EvidenceType.",""),
+            "file_size_human":   _human_size(e.file_size or 0),
+            "sha256_hash":       e.sha256_hash,
+            "md5_hash":          e.md5_hash,
+            "created_at":        e.created_at.isoformat() if e.created_at else "",
+        }
+        for e in ev_result.scalars().all()
+    ]
+
+    try:
+        from app.services.reports.pdf_generator import generate_evidence_summary
+        pdf_bytes = generate_evidence_summary(
+            case_data={"case_number": case.case_number},
+            evidence_list=evidence_list,
+            officer=current_user.badge_number,
+        )
+        filename = f"Evidence_Summary_{case.case_number.replace('/','_')}_{datetime.now(timezone.utc).strftime('%Y%m%d')}.pdf"
+        return StreamingResponse(
+            io.BytesIO(pdf_bytes), media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    except ImportError:
+        return JSONResponse(status_code=503, content={"error": "reportlab not installed"})
+
+
+def _human_size(size: int) -> str:
+    for unit in ["B","KB","MB","GB"]:
+        if size < 1024:
+            return f"{size:.1f} {unit}"
+        size //= 1024
+    return f"{size:.1f} TB"

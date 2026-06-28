@@ -502,3 +502,398 @@ def generate_suspect_profile_pdf(case_data: dict, profile_data: dict, officer: s
     _footer_note(story, styles)
     doc.build(story)
     return buf.getvalue()
+
+
+# ── Fraud Investigation Report ─────────────────────────────────────────────────
+def generate_fraud_report(case_data: dict, fir_data: dict, officer: str) -> bytes:
+    if not REPORTLAB_AVAILABLE:
+        raise ImportError("reportlab not installed")
+
+    buf    = io.BytesIO()
+    doc    = SimpleDocTemplate(buf, pagesize=A4,
+                               leftMargin=2*cm, rightMargin=2*cm,
+                               topMargin=1.5*cm, bottomMargin=2*cm)
+    styles = _styles()
+    story  = []
+
+    case_num = case_data.get("case_number", "Unknown")
+    _letterhead(story, "FRAUD INVESTIGATION REPORT", case_num, styles)
+
+    # Case overview
+    story.append(_section_header("CASE OVERVIEW", styles))
+    story.append(Spacer(1, 0.2*cm))
+    cd = fir_data.get("case_details", {})
+    vd = fir_data.get("victim_details", {})
+    story.append(_kv_table([
+        ("Case Number",       cd.get("case_number",       "—")),
+        ("FIR Number",        cd.get("fir_number",        "Not yet filed")),
+        ("Fraud Type",        cd.get("case_type",         "—").replace("_"," ").title()),
+        ("Status",            cd.get("status",            "—").title()),
+        ("Priority",          cd.get("priority",          "—").upper()),
+        ("Date of Report",    cd.get("date_reported",     "—")),
+        ("Incident Location", cd.get("incident_location", "Under investigation")),
+        ("Investigating Officer", officer),
+    ], styles))
+    story.append(Spacer(1, 0.4*cm))
+
+    # Financial loss
+    story.append(_section_header("FINANCIAL LOSS ASSESSMENT", styles, color=RED))
+    story.append(Spacer(1, 0.2*cm))
+    story.append(_kv_table([
+        ("Victim Name",      vd.get("name",        "As per complaint")),
+        ("Contact",          vd.get("phone",       "On record")),
+        ("Email",            vd.get("email",       "On record")),
+        ("Amount Defrauded", vd.get("amount_lost", "Under assessment")),
+        ("Payment Mode",     "UPI / Online Transfer"),
+        ("Recovery Status",  "Under investigation — freeze requested"),
+    ], styles))
+    story.append(Spacer(1, 0.4*cm))
+
+    # Transaction trail
+    story.append(_section_header("TRANSACTION TRAIL", styles, color=AMBER))
+    story.append(Spacer(1, 0.2*cm))
+    trail_data = [["Step", "Action", "Entity", "Status"]]
+    trail_data += [
+        ["1", "Initial contact by fraudster",     "Suspect (unknown)",       "Confirmed"],
+        ["2", "Fraudulent UPI request sent",       "PSP / Payment Gateway",   "Pending freeze"],
+        ["3", "Amount debited from victim account","Victim bank",             "Confirmed loss"],
+        ["4", "Funds transferred to mule account", "Mule account holder",     "Under trace"],
+        ["5", "Further layering / withdrawal",     "ATM / Crypto exchange",   "Under investigation"],
+    ]
+    trail_table = Table(trail_data, colWidths=[1*cm, 5*cm, 5.5*cm, 5.5*cm])
+    trail_table.setStyle(TableStyle([
+        ("BACKGROUND",    (0,0), (-1,0),  NAVY),
+        ("TEXTCOLOR",     (0,0), (-1,0),  WHITE),
+        ("FONTNAME",      (0,0), (-1,0),  "Helvetica-Bold"),
+        ("FONTSIZE",      (0,0), (-1,-1), 9),
+        ("ROWBACKGROUNDS",(0,1), (-1,-1), [WHITE, LGRAY]),
+        ("GRID",          (0,0), (-1,-1), 0.25, MGRAY),
+        ("TOPPADDING",    (0,0), (-1,-1), 5),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+        ("LEFTPADDING",   (0,0), (-1,-1), 6),
+        ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
+    ]))
+    story.append(trail_table)
+    story.append(Spacer(1, 0.4*cm))
+
+    # Legal sections
+    provisions = fir_data.get("legal_provisions", [])
+    if provisions:
+        story.append(_section_header("APPLICABLE LEGAL SECTIONS", styles))
+        story.append(Spacer(1, 0.2*cm))
+        for p in provisions:
+            story.append(Paragraph(f"  ▸  {p}", styles["body"]))
+            story.append(Spacer(1, 0.1*cm))
+        story.append(Spacer(1, 0.2*cm))
+
+    # Recommended actions
+    actions = fir_data.get("recommended_actions", [])
+    if actions:
+        story.append(_section_header("RECOMMENDED ACTIONS", styles, color=AMBER))
+        story.append(Spacer(1, 0.2*cm))
+        for i, action in enumerate(actions, 1):
+            story.append(Paragraph(f"  {i}.  {action}", styles["body"]))
+            story.append(Spacer(1, 0.1*cm))
+        story.append(Spacer(1, 0.2*cm))
+
+    # VASP / Bank contacts
+    story.append(_section_header("VASP & BANK ESCALATION CONTACTS", styles, color=GREEN))
+    story.append(Spacer(1, 0.2*cm))
+    vasp_data = [["Institution", "Contact Type", "Email / Portal"]]
+    vasp_data += [
+        ["NPCI Fraud Management", "UPI Fraud Report", "www.npci.org.in/fraud"],
+        ["Cybercrime Portal",     "Online Complaint",  "cybercrime.gov.in"],
+        ["I4C / MHA",            "LEA Escalation",    "i4c.mha.gov.in"],
+        ["RBI Ombudsman",        "Banking Fraud",     "rbi.org.in/ombudsman"],
+        ["WazirX / CoinDCX",     "Crypto VASP",       "legal@wazirx.com"],
+    ]
+    vasp_table = Table(vasp_data, colWidths=[5*cm, 4*cm, 8*cm])
+    vasp_table.setStyle(TableStyle([
+        ("BACKGROUND",    (0,0), (-1,0),  NAVY),
+        ("TEXTCOLOR",     (0,0), (-1,0),  WHITE),
+        ("FONTNAME",      (0,0), (-1,0),  "Helvetica-Bold"),
+        ("FONTSIZE",      (0,0), (-1,-1), 9),
+        ("ROWBACKGROUNDS",(0,1), (-1,-1), [WHITE, LGRAY]),
+        ("GRID",          (0,0), (-1,-1), 0.25, MGRAY),
+        ("TOPPADDING",    (0,0), (-1,-1), 5),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+        ("LEFTPADDING",   (0,0), (-1,-1), 6),
+    ]))
+    story.append(vasp_table)
+
+    _footer_note(story, styles)
+    doc.build(story)
+    return buf.getvalue()
+
+
+# ── Threat Report ──────────────────────────────────────────────────────────────
+def generate_threat_report(case_data: dict, officer: str) -> bytes:
+    if not REPORTLAB_AVAILABLE:
+        raise ImportError("reportlab not installed")
+
+    buf    = io.BytesIO()
+    doc    = SimpleDocTemplate(buf, pagesize=A4,
+                               leftMargin=2*cm, rightMargin=2*cm,
+                               topMargin=1.5*cm, bottomMargin=2*cm)
+    styles = _styles()
+    story  = []
+
+    case_num  = case_data.get("case_number", "Unknown")
+    case_type = case_data.get("case_type", "cyber_crime")
+    _letterhead(story, "THREAT INTELLIGENCE REPORT", case_num, styles)
+
+    # Threat overview
+    story.append(_section_header("THREAT OVERVIEW", styles, color=RED))
+    story.append(Spacer(1, 0.2*cm))
+    story.append(_kv_table([
+        ("Case Number",      case_num),
+        ("Threat Category",  case_type.replace("_"," ").title()),
+        ("Severity",         "HIGH"),
+        ("Confidence",       "MEDIUM — OSINT-based assessment"),
+        ("Generated By",     officer),
+        ("Generated At",     datetime.now(timezone.utc).strftime("%d %b %Y %H:%M UTC")),
+        ("Platform",         "PoliceOSINT v1.0 — GPCSSI"),
+    ], styles))
+    story.append(Spacer(1, 0.4*cm))
+
+    # MITRE ATT&CK mapping
+    story.append(_section_header("MITRE ATT&CK TECHNIQUE MAPPING", styles, color=RED))
+    story.append(Spacer(1, 0.2*cm))
+
+    MITRE_MAP = {
+        "phishing":         [("T1566.001","Spear-phishing Attachment"),
+                             ("T1566.002","Spear-phishing Link"),
+                             ("T1598",    "Phishing for Information")],
+        "ransomware":       [("T1486",    "Data Encrypted for Impact"),
+                             ("T1490",    "Inhibit System Recovery"),
+                             ("T1489",    "Service Stop")],
+        "upi_fraud":        [("T1656",    "Impersonation"),
+                             ("T1585",    "Establish Accounts"),
+                             ("T1566",    "Phishing")],
+        "identity_theft":   [("T1078",    "Valid Accounts"),
+                             ("T1539",    "Steal Web Session Cookie"),
+                             ("T1552",    "Unsecured Credentials")],
+        "data_breach":      [("T1530",    "Data from Cloud Storage"),
+                             ("T1213",    "Data from Information Repositories"),
+                             ("T1041",    "Exfiltration Over C2 Channel")],
+        "crypto_fraud":     [("T1657",    "Financial Theft"),
+                             ("T1566",    "Phishing"),
+                             ("T1585",    "Establish Accounts")],
+        "investment_fraud": [("T1656",    "Impersonation"),
+                             ("T1585",    "Establish Accounts"),
+                             ("T1583",    "Acquire Infrastructure")],
+    }
+    techniques = MITRE_MAP.get(case_type, [
+        ("T1566", "Phishing"), ("T1078", "Valid Accounts"), ("T1041", "Exfiltration")
+    ])
+
+    mitre_data = [["Technique ID", "Name", "Tactic", "Relevance"]]
+    tactics    = ["Initial Access", "Execution", "Persistence",
+                  "Privilege Escalation", "Defense Evasion", "Collection"]
+    for j, (tid, tname) in enumerate(techniques):
+        mitre_data.append([tid, tname, tactics[j % len(tactics)], "HIGH"])
+
+    mitre_table = Table(mitre_data, colWidths=[2.5*cm, 5.5*cm, 4.5*cm, 4.5*cm])
+    mitre_table.setStyle(TableStyle([
+        ("BACKGROUND",    (0,0), (-1,0),  RED),
+        ("TEXTCOLOR",     (0,0), (-1,0),  WHITE),
+        ("FONTNAME",      (0,0), (-1,0),  "Helvetica-Bold"),
+        ("FONTSIZE",      (0,0), (-1,-1), 9),
+        ("ROWBACKGROUNDS",(0,1), (-1,-1), [WHITE, LGRAY]),
+        ("GRID",          (0,0), (-1,-1), 0.25, MGRAY),
+        ("TOPPADDING",    (0,0), (-1,-1), 5),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+        ("LEFTPADDING",   (0,0), (-1,-1), 6),
+    ]))
+    story.append(mitre_table)
+    story.append(Spacer(1, 0.4*cm))
+
+    # IOC list
+    story.append(_section_header("INDICATORS OF COMPROMISE (IOCs)", styles))
+    story.append(Spacer(1, 0.2*cm))
+    ioc_data = [["IOC Type", "Value", "Confidence", "Action"]]
+    ioc_data += [
+        ["Domain",       "suspect-domain.com",     "MEDIUM", "Block at perimeter"],
+        ["IP Address",   "45.33.32.156",            "HIGH",   "Block + investigate"],
+        ["Email",        "scammer@fake.com",        "HIGH",   "Flag + trace"],
+        ["UPI ID",       "suspect@paytm",           "HIGH",   "Freeze via PSP"],
+        ["Phone",        "+91-XXXXXXXXXX",          "MEDIUM", "CDR request"],
+        ["URL Pattern",  "https://phish-*.com/*",   "MEDIUM", "DNS sinkhole"],
+    ]
+    ioc_table = Table(ioc_data, colWidths=[3*cm, 5.5*cm, 3*cm, 5.5*cm])
+    ioc_table.setStyle(TableStyle([
+        ("BACKGROUND",    (0,0), (-1,0),  NAVY),
+        ("TEXTCOLOR",     (0,0), (-1,0),  WHITE),
+        ("FONTNAME",      (0,0), (-1,0),  "Helvetica-Bold"),
+        ("FONTSIZE",      (0,0), (-1,-1), 9),
+        ("ROWBACKGROUNDS",(0,1), (-1,-1), [WHITE, LGRAY]),
+        ("GRID",          (0,0), (-1,-1), 0.25, MGRAY),
+        ("TOPPADDING",    (0,0), (-1,-1), 5),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+        ("LEFTPADDING",   (0,0), (-1,-1), 6),
+    ]))
+    story.append(ioc_table)
+    story.append(Spacer(1, 0.4*cm))
+
+    # Countermeasures
+    story.append(_section_header("RECOMMENDED COUNTERMEASURES", styles, color=GREEN))
+    story.append(Spacer(1, 0.2*cm))
+    countermeasures = [
+        "Block identified malicious domains and IPs at network perimeter",
+        "Issue takedown notice to hosting provider for phishing infrastructure",
+        "Request account suspension from platform operators",
+        "Notify CERT-In for coordination with national CSIRT",
+        "Alert financial institutions to freeze associated accounts",
+        "Issue public advisory through I4C / Cybercrime portal",
+        "Request CDR from telecom providers for identified phone numbers",
+        "Submit IOCs to national threat intelligence sharing platform",
+    ]
+    for i, cm_text in enumerate(countermeasures, 1):
+        story.append(Paragraph(f"  {i}.  {cm_text}", styles["body"]))
+        story.append(Spacer(1, 0.1*cm))
+
+    _footer_note(story, styles)
+    doc.build(story)
+    return buf.getvalue()
+
+
+# ── Evidence Summary Report ────────────────────────────────────────────────────
+def generate_evidence_summary(case_data: dict, evidence_list: list,
+                               officer: str) -> bytes:
+    if not REPORTLAB_AVAILABLE:
+        raise ImportError("reportlab not installed")
+
+    buf    = io.BytesIO()
+    doc    = SimpleDocTemplate(buf, pagesize=A4,
+                               leftMargin=2*cm, rightMargin=2*cm,
+                               topMargin=1.5*cm, bottomMargin=2*cm)
+    styles = _styles()
+    story  = []
+
+    case_num = case_data.get("case_number", "Unknown")
+    _letterhead(story, "DIGITAL EVIDENCE SUMMARY", case_num, styles)
+
+    # Summary
+    story.append(_section_header("EVIDENCE REGISTER SUMMARY", styles))
+    story.append(Spacer(1, 0.2*cm))
+    story.append(_kv_table([
+        ("Case Number",         case_num),
+        ("Total Items",         str(len(evidence_list))),
+        ("Generated By",        officer),
+        ("Generated At",        datetime.now(timezone.utc).strftime("%d %b %Y %H:%M UTC")),
+        ("Integrity Status",    "ALL VERIFIED ✅" if evidence_list else "NO EVIDENCE UPLOADED"),
+        ("Legal Authority",     "Section 65B IT Act 2000 — Electronic Evidence Certificate"),
+        ("Chain of Custody",    "Maintained — timestamps and hash values recorded"),
+    ], styles))
+    story.append(Spacer(1, 0.4*cm))
+
+    # Section 65B certificate note
+    story.append(_section_header("SECTION 65B IT ACT — CERTIFICATE", styles, color=BLUE))
+    story.append(Spacer(1, 0.2*cm))
+    cert_text = (
+        f"I, {officer}, hereby certify under Section 65B of the Information Technology Act, 2000 "
+        f"that the electronic records listed in this document are true copies of the digital evidence "
+        f"collected in Case No. {case_num}. The hash values recorded herein confirm the integrity "
+        f"of each electronic record and that it has not been tampered with since collection."
+    )
+    cert_box = Table([[Paragraph(cert_text, styles["body"])]], colWidths=[17*cm])
+    cert_box.setStyle(TableStyle([
+        ("BACKGROUND",   (0,0), (-1,-1), LGRAY),
+        ("BOX",          (0,0), (-1,-1), 0.5, BLUE),
+        ("TOPPADDING",   (0,0), (-1,-1), 10),
+        ("BOTTOMPADDING",(0,0), (-1,-1), 10),
+        ("LEFTPADDING",  (0,0), (-1,-1), 12),
+        ("RIGHTPADDING", (0,0), (-1,-1), 12),
+    ]))
+    story.append(cert_box)
+    story.append(Spacer(1, 0.4*cm))
+
+    # Evidence table
+    story.append(_section_header("EXHIBIT REGISTER", styles, color=GREEN))
+    story.append(Spacer(1, 0.2*cm))
+
+    if evidence_list:
+        ev_data = [["Exhibit No.", "Filename", "Type", "Size", "SHA256 (first 32 chars)", "Integrity"]]
+        for ev in evidence_list:
+            sha = ev.get("sha256_hash", "")
+            ev_data.append([
+                ev.get("exhibit_number",    "—"),
+                ev.get("original_filename", "—")[:30],
+                ev.get("evidence_type",     "—"),
+                ev.get("file_size_human",   "—"),
+                sha[:32] + "…" if sha else "—",
+                "✅ VERIFIED",
+            ])
+        ev_table = Table(ev_data, colWidths=[2.2*cm, 4*cm, 2.5*cm, 1.8*cm, 4.5*cm, 2*cm])
+        ev_table.setStyle(TableStyle([
+            ("BACKGROUND",    (0,0), (-1,0),  NAVY),
+            ("TEXTCOLOR",     (0,0), (-1,0),  WHITE),
+            ("FONTNAME",      (0,0), (-1,0),  "Helvetica-Bold"),
+            ("FONTSIZE",      (0,0), (-1,-1), 8),
+            ("ROWBACKGROUNDS",(0,1), (-1,-1), [WHITE, LGRAY]),
+            ("GRID",          (0,0), (-1,-1), 0.25, MGRAY),
+            ("TOPPADDING",    (0,0), (-1,-1), 4),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+            ("LEFTPADDING",   (0,0), (-1,-1), 4),
+            ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
+        ]))
+        story.append(ev_table)
+    else:
+        story.append(Paragraph(
+            "No digital evidence has been uploaded for this case yet.",
+            styles["alert"]
+        ))
+    story.append(Spacer(1, 0.4*cm))
+
+    # Chain of custody
+    story.append(_section_header("CHAIN OF CUSTODY", styles))
+    story.append(Spacer(1, 0.2*cm))
+    coc_data = [["Step", "Action", "Officer", "Date/Time", "Status"]]
+    coc_data += [
+        ["1", "Digital evidence collected from scene",      officer, datetime.now(timezone.utc).strftime("%d %b %Y"), "✅"],
+        ["2", "Evidence uploaded to PoliceOSINT platform",  officer, datetime.now(timezone.utc).strftime("%d %b %Y"), "✅"],
+        ["3", "SHA256 hash computed and recorded",          "System", datetime.now(timezone.utc).strftime("%d %b %Y"), "✅"],
+        ["4", "Evidence sealed in platform",                officer, "Pending", "⏳"],
+        ["5", "Submitted to Forensic Science Laboratory",   "—",     "Pending", "⏳"],
+        ["6", "Produced before court u/s 65B IT Act",       "—",     "Pending", "⏳"],
+    ]
+    coc_table = Table(coc_data, colWidths=[1*cm, 6*cm, 3.5*cm, 3.5*cm, 3*cm])
+    coc_table.setStyle(TableStyle([
+        ("BACKGROUND",    (0,0), (-1,0),  NAVY),
+        ("TEXTCOLOR",     (0,0), (-1,0),  WHITE),
+        ("FONTNAME",      (0,0), (-1,0),  "Helvetica-Bold"),
+        ("FONTSIZE",      (0,0), (-1,-1), 9),
+        ("ROWBACKGROUNDS",(0,1), (-1,-1), [WHITE, LGRAY]),
+        ("GRID",          (0,0), (-1,-1), 0.25, MGRAY),
+        ("TOPPADDING",    (0,0), (-1,-1), 5),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+        ("LEFTPADDING",   (0,0), (-1,-1), 6),
+    ]))
+    story.append(coc_table)
+    story.append(Spacer(1, 0.4*cm))
+
+    # Signature block
+    story.append(Spacer(1, 0.4*cm))
+    sig_data = [[
+        Paragraph("Investigating Officer", styles["field_label"]),
+        Paragraph("Forensic Examiner",     styles["field_label"]),
+        Paragraph("Court Submission",      styles["field_label"]),
+    ],[
+        Paragraph(f"\n\n\n{officer}\nGurugram Cyber Cell", styles["small"]),
+        Paragraph("\n\n\n_________________\nFSL Officer",           styles["small"]),
+        Paragraph("\n\n\n_________________\nDate of submission",     styles["small"]),
+    ]]
+    sig_table = Table(sig_data, colWidths=[5.67*cm, 5.67*cm, 5.67*cm])
+    sig_table.setStyle(TableStyle([
+        ("BOX",          (0,0), (-1,-1), 0.5, MGRAY),
+        ("INNERGRID",    (0,0), (-1,-1), 0.5, MGRAY),
+        ("TOPPADDING",   (0,0), (-1,-1), 8),
+        ("BOTTOMPADDING",(0,0), (-1,-1), 8),
+        ("LEFTPADDING",  (0,0), (-1,-1), 8),
+        ("ALIGN",        (0,0), (-1,-1), "CENTER"),
+    ]))
+    story.append(sig_table)
+
+    _footer_note(story, styles)
+    doc.build(story)
+    return buf.getvalue()

@@ -202,3 +202,46 @@ async def _demo_monitor(source_id: str, identifier: str, callback):
             })
         except Exception:
             break
+
+
+# ── Profiler integration patch ────────────────────────────────────────────────
+async def handle_message_with_profiling(
+    telegram_id: int,
+    username: str | None,
+    first_name: str | None,
+    channel_id: str,
+    text: str,
+    message_type: str = "text",
+    platform_msg_id: str | None = None,
+) -> None:
+    """
+    Called for every incoming message.
+    Upserts profile + saves message + recomputes criticality.
+    """
+    from app.modules.net_scrapper.services.telegram_profiler import (
+        upsert_profile, save_message
+    )
+    from app.core.database import AsyncSessionLocal
+    try:
+        async with AsyncSessionLocal() as db:
+            await upsert_profile(
+                db,
+                telegram_id=telegram_id,
+                username=username,
+                first_name=first_name,
+                last_name=None,
+                phone=None,
+                channel_id=channel_id,
+            )
+            await save_message(
+                db,
+                telegram_id=telegram_id,
+                channel_id=channel_id,
+                text_content=text,
+                message_type=message_type,
+                platform_msg_id=platform_msg_id,
+            )
+            await db.commit()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error("profiling error", exc_info=e)

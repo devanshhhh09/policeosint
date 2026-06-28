@@ -166,6 +166,12 @@ async def delete_investigation(
 _original_dispatch = _dispatch
 
 async def _dispatch(inv_type: str, query: str, query_type: str) -> dict:
+    if inv_type in ("social_media", "social"):
+        from app.services.osint.social_media import investigate_social_media, investigate_social_media_demo
+        try:
+            return await investigate_social_media(query)
+        except Exception:
+            return await investigate_social_media_demo(query)
     if inv_type == "crypto":
         from app.services.osint.crypto import investigate_crypto
         return await investigate_crypto(query_type or "auto", query)

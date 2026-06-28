@@ -5,7 +5,7 @@ Prefix: /api/v1/scrapper
 from fastapi import APIRouter, Depends, Query, BackgroundTasks
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, desc
+from sqlalchemy import select, func, desc, text, text
 from uuid import UUID
 from datetime import datetime, timezone
 import asyncio
@@ -718,3 +718,185 @@ async def get_redirect_chain(
         "edges":  chain_edges,
         "chains": [{"parent": e["from"].replace("parent_",""), "child": e["to"]} for e in chain_edges],
     }
+
+
+# ── Member profiling endpoints ────────────────────────────────────────────────
+from app.modules.net_scrapper.services.telegram_profiler import fetch_channel_members
+
+@router.get("/members")
+async def list_members(
+    channel_id:       str   = Query(None),
+    criticality_flag: str   = Query(None),
+    search:           str   = Query(None),
+    page:             int   = Query(1, ge=1),
+    per_page:         int   = Query(20, le=100),
+    db: AsyncSession        = Depends(get_db),
+    current_user: User      = Depends(get_current_user),
+):
+    """List all profiled Telegram members with filters."""
+    filters = ["1=1"]
+    params: dict = {}
+
+    if channel_id:
+        filters.append(":channel_id = ANY(joined_channel_ids)")
+        params["channel_id"] = channel_id
+    if criticality_flag:
+        filters.append("criticality_flag = :flag")
+        params["flag"] = criticality_flag
+    if search:
+        filters.append("(username ILIKE :s OR first_name ILIKE :s OR unique_telegram_id::text = :exact)")
+        params["s"]     = f"%{search}%"
+        params["exact"] = search
+
+    where = " AND ".join(filters)
+    count_q = await db.execute(
+        text(f"SELECT COUNT(*) FROM telegram_profiles WHERE {where}"), params
+    )
+    total = count_q.scalar() or 0
+
+    rows = await db.execute(
+        text(f"""
+            SELECT unique_telegram_id, username, first_name, last_name,
+                   phone, criticality_flag, message_count, risk_score,
+                   last_active, joined_channel_ids,
+                   extracted_phones, extracted_upis, extracted_wallets,
+                   first_seen
+            FROM telegram_profiles
+            WHERE {where}
+            ORDER BY
+                CASE criticality_flag
+                    WHEN 'critical'    THEN 1
+                    WHEN 'suspicious'  THEN 2
+                    WHEN 'normal'      THEN 3
+                    ELSE 4
+                END,
+                risk_score DESC
+            LIMIT :limit OFFSET :offset
+        """), {**params, "limit": per_page, "offset": (page-1)*per_page}
+    )
+    members = []
+    for r in rows.fetchall():
+        members.append({
+            "telegram_id":      r[0],
+            "username":         r[1],
+            "first_name":       r[2],
+            "last_name":        r[3],
+            "phone":            r[4],
+            "criticality_flag": r[5],
+            "message_count":    r[6],
+            "risk_score":       r[7],
+            "last_active":      r[8].isoformat() if r[8] else None,
+            "joined_channels":  r[9] or [],
+            "extracted_phones": r[10] or [],
+            "extracted_upis":   r[11] or [],
+            "extracted_wallets":r[12] or [],
+            "first_seen":       r[13].isoformat() if r[13] else None,
+        })
+
+    return {"members": members, "total": total, "page": page, "per_page": per_page}
+
+
+@router.get("/members/stats/summary")
+async def member_stats(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    try:
+        total      = (await db.execute(func.count().select().select_from(text("telegram_profiles")))).scalar() or 0
+    except Exception:
+        total = 0
+    try:
+        from sqlalchemy import Integer
+        result = await db.execute(text("""
+            SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN criticality_flag='critical'   THEN 1 ELSE 0 END) AS critical,
+                SUM(CASE WHEN criticality_flag='suspicious' THEN 1 ELSE 0 END) AS suspicious,
+                SUM(CASE WHEN criticality_flag='normal'     THEN 1 ELSE 0 END) AS normal,
+                SUM(CASE WHEN criticality_flag='unknown'    THEN 1 ELSE 0 END) AS unknown,
+                COALESCE(SUM(message_count), 0)                                  AS total_messages
+            FROM telegram_profiles
+        """))
+        r = result.fetchone()
+        if r:
+            return {
+                "total":          int(r[0] or 0),
+                "critical":       int(r[1] or 0),
+                "suspicious":     int(r[2] or 0),
+                "normal":         int(r[3] or 0),
+                "unknown":        int(r[4] or 0),
+                "total_messages": int(r[5] or 0),
+            }
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"member_stats error: {e}")
+    return {
+        "total": 0, "critical": 0, "suspicious": 0,
+        "normal": 0, "unknown": 0, "total_messages": 0,
+    }
+
+@router.get("/members/{telegram_id}/messages")
+async def get_member_messages(
+    telegram_id: int,
+    channel_id:  str  = Query(None),
+    page:        int  = Query(1, ge=1),
+    per_page:    int  = Query(30, le=100),
+    db: AsyncSession  = Depends(get_db),
+    current_user: User= Depends(get_current_user),
+):
+    """Get all messages from a specific member."""
+    filters = ["user_id = :uid"]
+    params: dict = {"uid": telegram_id}
+    if channel_id:
+        filters.append("channel_id = :cid")
+        params["cid"] = channel_id
+
+    where = " AND ".join(filters)
+    total = (await db.execute(
+        text(f"SELECT COUNT(*) FROM telegram_member_messages WHERE {where}"), params
+    )).scalar() or 0
+
+    rows = await db.execute(
+        text(f"""
+            SELECT id, channel_id, message_text, message_type,
+                   extracted_links, extracted_upis, extracted_phones,
+                   extracted_wallets, risk_score, is_flagged, scraped_at
+            FROM telegram_member_messages
+            WHERE {where}
+            ORDER BY scraped_at DESC
+            LIMIT :limit OFFSET :offset
+        """), {**params, "limit": per_page, "offset": (page-1)*per_page}
+    )
+    messages = []
+    for r in rows.fetchall():
+        messages.append({
+            "id":               str(r[0]),
+            "channel_id":       r[1],
+            "message_text":     r[2],
+            "message_type":     r[3],
+            "extracted_links":  r[4] or [],
+            "extracted_upis":   r[5] or [],
+            "extracted_phones": r[6] or [],
+            "extracted_wallets":r[7] or [],
+            "risk_score":       r[8],
+            "is_flagged":       r[9],
+            "scraped_at":       r[10].isoformat() if r[10] else None,
+        })
+    return {"messages": messages, "total": total, "page": page, "per_page": per_page}
+
+
+@router.post("/sources/{source_id}/fetch-members")
+async def fetch_members(
+    source_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_perm("investigate:run")),
+):
+    """Trigger member list fetch for a monitored channel."""
+    result = await db.execute(select(ScrapedSource).where(ScrapedSource.id == source_id))
+    source = result.scalar_one_or_none()
+    if not source:
+        return JSONResponse(status_code=404, content={"error": "Source not found"})
+    data = await fetch_channel_members(source.identifier, source.identifier)
+    return data
+
+
