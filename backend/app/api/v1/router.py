@@ -24,3 +24,7 @@ api_router.include_router(scrapper_router, prefix="/scrapper", tags=["Net Scrapp
 
 from app.api.v1.endpoints.ipdr import router as ipdr_router
 api_router.include_router(ipdr_router, prefix="/ipdr", tags=["IPDR Analysis"])
+
+# Media Forensics upload endpoint
+from app.api.v1.endpoints.media_forensics import router as media_forensics_router
+api_router.include_router(media_forensics_router, prefix="/media-forensics", tags=["Media Forensics"])
