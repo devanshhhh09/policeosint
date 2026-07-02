@@ -26,7 +26,7 @@ export default function MediaForensicsPage() {
   const [result, setResult]     = useState<any>(null)
   const [urlResult, setUrlResult] = useState<any>(null)
   const [error, setError]       = useState('')
-  const [activeTab, setActiveTab] = useState<'overview'|'exif'|'gps'|'hashes'|'manipulation'|'headers'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview'|'exif'|'gps'|'hashes'|'manipulation'|'headers'|'reverse_search'>('overview')
 
   /* ── File upload handler ─────────────────────────────────────────────────── */
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -141,7 +141,12 @@ export default function MediaForensicsPage() {
                     <p className="text-gray-400 font-medium">Drop image here</p>
                     <p className="text-gray-600 text-xs mt-1">or click to browse</p>
                     <p className="text-gray-700 text-xs mt-2">JPEG · PNG · WEBP · GIF · BMP</p>
-                  </>
+      
+              {/* ── Reverse Search ── */}
+              {activeTab === ('reverse_search' as typeof activeTab) && (
+                <ReverseSearchPanel file={file} mode={mode} mediaUrl={mediaUrl} token="" />
+              )}
+            </>
                 )}
                 <input ref={fileRef} type="file"
                   accept="image/jpeg,image/png,image/gif,image/webp,image/bmp"
@@ -324,6 +329,8 @@ export default function MediaForensicsPage() {
                   { id:'manipulation', label:'⚠ Manipulation',  show: !!result },
                   { id:'hashes',       label:'Hashes',         show: !!result },
                   { id:'headers',      label:'HTTP Headers',   show: !!urlResult },
+                  { id:'reverse_search', label:'🔍 Reverse Search', show: true },
+                  { id:'reverse_search', label:'🔍 Reverse Search', show: true },
                 ] as const).filter(t => t.show).map(t => (
                   <button key={t.id} onClick={() => setActiveTab(t.id as typeof activeTab)}
                     className={`px-3 py-2 text-xs font-medium border-b-2 -mb-px whitespace-nowrap transition-colors ${
@@ -620,6 +627,16 @@ export default function MediaForensicsPage() {
                     ))}
                   </div>
                 </div>
+              )}
+
+              {/* ── Reverse Search ── */}
+              {activeTab === 'reverse_search' && (
+                <ReverseSearchPanel
+                  file={file}
+                  mode={mode}
+                  mediaUrl={mediaUrl}
+                  token=""
+                />
               )}
 
               {/* ── HTTP Headers ── */}

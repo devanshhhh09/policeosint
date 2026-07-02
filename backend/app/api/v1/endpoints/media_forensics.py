@@ -210,3 +210,74 @@ def _url_summary(url: str, url_meta: dict, exif: dict | None) -> str:
     if url_meta.get('risk_flags'):
         parts.append(f"{len(url_meta['risk_flags'])} risk flag(s)")
     return ' | '.join(parts)
+
+
+import base64
+
+@router.post("/reverse-search")
+async def reverse_image_search(
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_perm("investigate:run")),
+):
+    """
+    Reverse image search using Google Vision API web detection.
+    Finds pages, similar images, and matching images across the web.
+    """
+    from app.core.config import settings
+
+    image_bytes = await file.read()
+    if len(image_bytes) > 10 * 1024 * 1024:
+        return JSONResponse(status_code=413, content={"error": "Max 10MB"})
+
+    image_b64 = base64.b64encode(image_bytes).decode('utf-8')
+    api_key   = getattr(settings, 'GOOGLE_VISION_API_KEY', None)
+
+    results = {
+        "full_matches":    [],
+        "partial_matches": [],
+        "similar_images":  [],
+        "pages_with_image":[],
+        "best_guess_labels":[],
+        "status":          "no_api_key",
+        "manual_links":    _manual_search_links(),
+    }
+
+    if api_key:
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp = await client.post(
+                    f"https://vision.googleapis.com/v1/images:annotate?key={api_key}",
+                    json={"requests": [{
+                        "image":    {"content": image_b64},
+                        "features": [{"type": "WEB_DETECTION", "maxResults": 20}]
+                    }]}
+                )
+                if resp.status_code == 200:
+                    web = resp.json()['responses'][0].get('webDetection', {})
+                    results.update({
+                        "full_matches":    [{"url":m["url"],"score":m.get("score",0)} for m in web.get("fullMatchingImages",[])],
+                        "partial_matches": [{"url":m["url"],"score":m.get("score",0)} for m in web.get("partialMatchingImages",[])],
+                        "similar_images":  [{"url":m["url"],"score":m.get("score",0)} for m in web.get("visuallySimilarImages",[])],
+                        "pages_with_image":[{"url":p["url"],"title":p.get("pageTitle","")} for p in web.get("pagesWithMatchingImages",[])],
+                        "best_guess_labels":[l["label"] for l in web.get("bestGuessLabels",[])],
+                        "status":          "success",
+                        "total_found":     len(web.get("fullMatchingImages",[])) + len(web.get("pagesWithMatchingImages",[])),
+                    })
+                else:
+                    results["status"] = f"api_error_{resp.status_code}"
+                    results["error"]  = resp.json().get("error",{}).get("message","")
+        except Exception as e:
+            results["status"] = "error"
+            results["error"]  = str(e)[:200]
+
+    return results
+
+
+def _manual_search_links() -> dict:
+    return {
+        "google":  "https://images.google.com/",
+        "tineye":  "https://tineye.com/",
+        "yandex":  "https://yandex.com/images/",
+        "bing":    "https://www.bing.com/visualsearch",
+        "note":    "Upload the image manually to these links for reverse search without API key",
+    }
