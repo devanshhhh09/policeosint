@@ -1,6 +1,7 @@
 'use client'
 import { useState, useRef } from 'react'
 import { api } from '@/lib/api'
+import ReverseSearchPanel from '@/components/media/ReverseSearchPanel'
 
 const RISK_COLOR = (r: number) =>
   r >= 60 ? 'text-red-400' : r >= 30 ? 'text-amber-400' : 'text-green-400'
